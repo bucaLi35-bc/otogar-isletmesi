@@ -35,7 +35,7 @@ import { getAuth, onAuthStateChanged, setPersistence, browserLocalPersistence, c
 import { getFirestore, doc, getDoc, setDoc, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyAStdXPfPv8DwKV7LicOXcpStlpRKNnls0",
+  apiKey: "AIzaSyAStdXPfPV8DwKV7LjcOXcpStlnRKNnls0",
   authDomain: "otogar-isletmesi.firebaseapp.com",
   projectId: "otogar-isletmesi",
   storageBucket: "otogar-isletmesi.firebasestorage.app",
@@ -63,6 +63,7 @@ function firebaseErrorMessage(error) {
     "auth/wrong-password": "Şifre hatalı.",
     "auth/too-many-requests": "Çok fazla deneme yapıldı. Bir süre sonra tekrar deneyin.",
     "auth/network-request-failed": "İnternet bağlantısı kurulamadı.",
+    "auth/api-key-not-valid.-please-pass-a-valid-api-key.": "Firebase API anahtarı geçersiz.",
     "auth/unauthorized-domain": "Bu alan adına Firebase giriş izni verilmemiş."
   };
   return messages[code] || (error && error.message) || "Beklenmeyen bir hata oluştu.";
