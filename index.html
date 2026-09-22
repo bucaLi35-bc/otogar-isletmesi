@@ -30,6 +30,43 @@ import { createRoot } from "react-dom/client";
 import { Fragment, jsx, jsxs } from "react/jsx-runtime";
 import { useState, useRef, useMemo, useEffect, Component } from "react";
 import { Bus, Users, Fuel, Wrench, TrendingUp, TrendingDown, Clock, AlertTriangle, Plus, X, Check, MapPin, Gauge, ShieldCheck, PiggyBank, Snowflake, Sun, Home, Building2, Wallet, Landmark, Star, PieChart, Smile, Settings, Bell, Mail, Route as RouteIcon, Sparkles, ArrowLeft, ChevronUp, ChevronDown } from "lucide-react";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
+import { getAuth, onAuthStateChanged, setPersistence, browserLocalPersistence, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, signOut } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
+import { getFirestore, doc, getDoc, setDoc, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyAStdXPfPv8DwKV7LicOXcpStlpRKNnls0",
+  authDomain: "otogar-isletmesi.firebaseapp.com",
+  projectId: "otogar-isletmesi",
+  storageBucket: "otogar-isletmesi.firebasestorage.app",
+  messagingSenderId: "33911335006",
+  appId: "1:33911335006:web:b3131e860dfae76f602ccf",
+  measurementId: "G-PBFSE2BCQF"
+};
+const firebaseApp = initializeApp(firebaseConfig);
+const firebaseAuth = getAuth(firebaseApp);
+const firebaseDb = getFirestore(firebaseApp);
+const firebasePersistenceReady = setPersistence(firebaseAuth, browserLocalPersistence).catch((error) => {
+  console.warn("[auth] Oturum kalıcılığı ayarlanamadı:", error);
+});
+let currentCloudUser = null;
+
+function firebaseErrorMessage(error) {
+  const code = error && error.code ? error.code : "";
+  const messages = {
+    "auth/invalid-email": "Geçerli bir e-posta adresi yazın.",
+    "auth/missing-password": "Şifrenizi yazın.",
+    "auth/weak-password": "Şifre en az 6 karakter olmalıdır.",
+    "auth/email-already-in-use": "Bu e-posta adresiyle daha önce hesap oluşturulmuş.",
+    "auth/invalid-credential": "E-posta adresi veya şifre hatalı.",
+    "auth/user-not-found": "Bu e-posta adresiyle kayıtlı hesap bulunamadı.",
+    "auth/wrong-password": "Şifre hatalı.",
+    "auth/too-many-requests": "Çok fazla deneme yapıldı. Bir süre sonra tekrar deneyin.",
+    "auth/network-request-failed": "İnternet bağlantısı kurulamadı.",
+    "auth/unauthorized-domain": "Bu alan adına Firebase giriş izni verilmemiş."
+  };
+  return messages[code] || (error && error.message) || "Beklenmeyen bir hata oluştu.";
+}
 const C = {
   asphalt: "#141516",
   panel: "#1D1F21",
@@ -5456,7 +5493,73 @@ async function safeStorageSet(key, value) {
 }
 const SAVE_KEY = "bus-company-save";
 const SAVE_KEY_BACKUP = "bus-company-save-backup";
+const CLOUD_OWNER_STORAGE_KEY = "bmt_cloud-owner-uid";
 const EARLY_PAYMENT_DISCOUNT = 0.04;
+
+function getLocalCloudOwner() {
+  try {
+    return hasLocalStorage() ? window.localStorage.getItem(CLOUD_OWNER_STORAGE_KEY) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function setLocalCloudOwner(uid) {
+  try {
+    if (hasLocalStorage() && uid) window.localStorage.setItem(CLOUD_OWNER_STORAGE_KEY, uid);
+  } catch (e) {
+    console.warn("[cloud-save] Yerel hesap işareti yazılamadı:", e);
+  }
+}
+
+async function clearLocalGameCache() {
+  delete memoryStore[SAVE_KEY];
+  delete memoryStore[SAVE_KEY_BACKUP];
+  if (hasLocalStorage()) {
+    try {
+      window.localStorage.removeItem("bmt_" + SAVE_KEY);
+      window.localStorage.removeItem("bmt_" + SAVE_KEY_BACKUP);
+      window.localStorage.removeItem(CLOUD_OWNER_STORAGE_KEY);
+    } catch (e) {
+      console.warn("[storage] Yerel hesap önbelleği temizlenemedi:", e);
+    }
+  }
+  if (typeof window !== "undefined" && window.storage && typeof window.storage.delete === "function") {
+    try { await window.storage.delete("bmt_" + SAVE_KEY, false); } catch (e) {}
+    try { await window.storage.delete("bmt_" + SAVE_KEY_BACKUP, false); } catch (e) {}
+  }
+}
+
+function cloudSaveDocumentRef() {
+  return currentCloudUser ? doc(firebaseDb, "gameSaves", currentCloudUser.uid) : null;
+}
+
+async function readCloudGameState() {
+  const ref = cloudSaveDocumentRef();
+  if (!ref) return null;
+  const snapshot = await getDoc(ref);
+  if (!snapshot.exists()) return null;
+  const data = snapshot.data() || {};
+  return {
+    primaryJson: typeof data.primaryJson === "string" ? data.primaryJson : null,
+    backupJson: typeof data.backupJson === "string" ? data.backupJson : null,
+    updatedAtClient: data.updatedAtClient || null
+  };
+}
+
+async function writeCloudGameState(primaryJson, backupJson) {
+  const ref = cloudSaveDocumentRef();
+  if (!ref) return false;
+  await setDoc(ref, {
+    primaryJson,
+    backupJson: backupJson || null,
+    updatedAt: serverTimestamp(),
+    updatedAtClient: Date.now(),
+    formatVersion: 1
+  });
+  return true;
+}
+
 async function clearAllSavedGameData() {
   delete memoryStore[SAVE_KEY];
   delete memoryStore[SAVE_KEY_BACKUP];
@@ -5484,19 +5587,77 @@ async function clearAllSavedGameData() {
       console.warn("[storage] window.storage.delete failed:", e && e.message);
     }
   }
+  const cloudRef = cloudSaveDocumentRef();
+  if (cloudRef) {
+    try {
+      await deleteDoc(cloudRef);
+    } catch (e) {
+      console.warn("[cloud-save] Bulut kaydı silinemedi:", e);
+    }
+  }
 }
 let lastKnownGoodSnapshot = null;
 async function saveGameState(snapshotJson) {
   if (lastKnownGoodSnapshot) await safeStorageSet(SAVE_KEY_BACKUP, lastKnownGoodSnapshot);
   const res = await safeStorageSet(SAVE_KEY, snapshotJson);
+  let cloudSaved = false;
+  if (currentCloudUser) {
+    try {
+      cloudSaved = await writeCloudGameState(snapshotJson, lastKnownGoodSnapshot);
+      if (cloudSaved && !lastStorageWriteBackends.includes("Firebase Bulut")) {
+        lastStorageWriteBackends.push("Firebase Bulut");
+      }
+      if (cloudSaved) setLocalCloudOwner(currentCloudUser.uid);
+    } catch (e) {
+      console.warn("[cloud-save] Buluta kayıt başarısız; yerel kayıt korunuyor:", e);
+    }
+  }
   lastKnownGoodSnapshot = snapshotJson;
-  return res;
+  return { ...res, persistent: res.persistent || cloudSaved, cloudSaved };
 }
 async function loadGameStateWithFailsafe() {
+  if (currentCloudUser) {
+    try {
+      const cloud = await readCloudGameState();
+      if (cloud && cloud.primaryJson) {
+        try {
+          const parsed = JSON.parse(cloud.primaryJson);
+          await safeStorageSet(SAVE_KEY, cloud.primaryJson);
+          if (cloud.backupJson) await safeStorageSet(SAVE_KEY_BACKUP, cloud.backupJson);
+          lastKnownGoodSnapshot = cloud.primaryJson;
+          setLocalCloudOwner(currentCloudUser.uid);
+          lastStorageReadDiagnostics = { backend: "Firebase Bulut", found: true };
+          return { parsed, raw: cloud.primaryJson, usedBackup: false, persistent: true };
+        } catch (e) {
+          console.warn("[cloud-save] Ana bulut kaydı bozuk, bulut yedeği deneniyor:", e);
+        }
+        if (cloud.backupJson) {
+          try {
+            const parsed = JSON.parse(cloud.backupJson);
+            await safeStorageSet(SAVE_KEY, cloud.backupJson);
+            lastKnownGoodSnapshot = cloud.backupJson;
+            setLocalCloudOwner(currentCloudUser.uid);
+            lastStorageReadDiagnostics = { backend: "Firebase Bulut (yedek)", found: true };
+            return { parsed, raw: cloud.backupJson, usedBackup: true, persistent: true };
+          } catch (e) {
+            console.warn("[cloud-save] Bulut yedeği de bozuk; yerel kayıt deneniyor:", e);
+          }
+        }
+      }
+      const localOwner = getLocalCloudOwner();
+      if (localOwner && localOwner !== currentCloudUser.uid) {
+        console.warn("[cloud-save] Bu cihazdaki yerel kayıt başka bir hesaba ait; yeni hesaba aktarılmadı.");
+        return { parsed: null, raw: null, usedBackup: false, persistent: true };
+      }
+    } catch (e) {
+      console.warn("[cloud-save] Bulut kaydı okunamadı; yerel kayıt deneniyor:", e);
+    }
+  }
   const primary = await safeStorageGet(SAVE_KEY);
   if (primary.result && primary.result.value) {
     try {
       const parsed = JSON.parse(primary.result.value);
+      if (currentCloudUser) setLocalCloudOwner(currentCloudUser.uid);
       return { parsed, raw: primary.result.value, usedBackup: false, persistent: primary.persistent };
     } catch (e) {
       console.warn("[save] primary save is corrupted, falling back to backup:", e);
@@ -5506,6 +5667,7 @@ async function loadGameStateWithFailsafe() {
   if (backup.result && backup.result.value) {
     try {
       const parsed = JSON.parse(backup.result.value);
+      if (currentCloudUser) setLocalCloudOwner(currentCloudUser.uid);
       return { parsed, raw: backup.result.value, usedBackup: true, persistent: backup.persistent };
     } catch (e) {
       console.warn("[save] backup save is also corrupted:", e);
@@ -7432,7 +7594,7 @@ function OtogarSimCore() {
     }
     (async () => {
       try {
-        const res = await safeStorageSet(SAVE_KEY, JSON.stringify(parsed));
+        const res = await saveGameState(JSON.stringify(parsed));
         if (!res || !res.ok) {
           setSaveActionMsg("\u26A0 Kay\u0131t i\xE7e aktar\u0131lamad\u0131 \u2014 depolamaya yaz\u0131lamad\u0131.");
           return;
@@ -21158,9 +21320,104 @@ export {
   OtogarSim as default
 };
 
+function FirebaseAuthScreen() {
+  const [mode, setMode] = useState("login");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const isRegister = mode === "register";
+  async function submit(event) {
+    event.preventDefault();
+    setBusy(true);
+    setMessage("");
+    try {
+      await firebasePersistenceReady;
+      if (isRegister) {
+        await createUserWithEmailAndPassword(firebaseAuth, email.trim(), password);
+      } else {
+        await signInWithEmailAndPassword(firebaseAuth, email.trim(), password);
+      }
+    } catch (error) {
+      setMessage(firebaseErrorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function resetPassword() {
+    if (!email.trim()) {
+      setMessage("Şifre sıfırlamak için önce e-posta adresinizi yazın.");
+      return;
+    }
+    setBusy(true);
+    setMessage("");
+    try {
+      await sendPasswordResetEmail(firebaseAuth, email.trim());
+      setMessage("Şifre sıfırlama bağlantısı e-posta adresinize gönderildi.");
+    } catch (error) {
+      setMessage(firebaseErrorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+  const inputStyle = {
+    width: "100%", boxSizing: "border-box", borderRadius: 10, border: "1px solid #45484c",
+    background: "#151719", color: "#EFEDE4", padding: "12px 13px", outline: "none", fontSize: 14
+  };
+  return /* @__PURE__ */ jsx("div", { style: { minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, boxSizing: "border-box", background: "radial-gradient(circle at top, #24352d 0%, #141516 52%)", color: "#EFEDE4", fontFamily: "Arial, sans-serif" }, children: /* @__PURE__ */ jsxs("div", { style: { width: "100%", maxWidth: 420, background: "#1D1F21", border: "1px solid #3a3b3e", borderRadius: 18, padding: 26, boxShadow: "0 24px 70px rgba(0,0,0,.48)" }, children: [
+    /* @__PURE__ */ jsx("div", { style: { width: 54, height: 54, borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", background: "#00693E", marginBottom: 18 }, children: /* @__PURE__ */ jsx(Bus, { size: 30, color: "#F3EEDD" }) }),
+    /* @__PURE__ */ jsx("h1", { style: { margin: 0, fontSize: 26, letterSpacing: ".02em" }, children: "OTOGAR İŞLETMESİ" }),
+    /* @__PURE__ */ jsx("p", { style: { color: "#A9ACA8", margin: "8px 0 22px", lineHeight: 1.5, fontSize: 13 }, children: isRegister ? "Yeni hesabınızı oluşturun. Oyun kaydınız bu hesaba bağlanacaktır." : "Bulut kaydınıza ulaşmak için hesabınıza giriş yapın." }),
+    /* @__PURE__ */ jsxs("form", { onSubmit: submit, children: [
+      /* @__PURE__ */ jsx("label", { style: { display: "block", color: "#A9ACA8", fontSize: 12, marginBottom: 6 }, children: "E-posta" }),
+      /* @__PURE__ */ jsx("input", { type: "email", value: email, onChange: (e) => setEmail(e.target.value), autoComplete: "email", required: true, placeholder: "ornek@email.com", style: inputStyle }),
+      /* @__PURE__ */ jsx("label", { style: { display: "block", color: "#A9ACA8", fontSize: 12, margin: "15px 0 6px" }, children: "Şifre" }),
+      /* @__PURE__ */ jsx("input", { type: "password", value: password, onChange: (e) => setPassword(e.target.value), autoComplete: isRegister ? "new-password" : "current-password", required: true, minLength: 6, placeholder: "En az 6 karakter", style: inputStyle }),
+      message && /* @__PURE__ */ jsx("div", { style: { marginTop: 14, borderRadius: 9, padding: "10px 11px", fontSize: 12, lineHeight: 1.45, color: message.startsWith("Şifre sıfırlama") ? "#8fdda7" : "#ffb0a9", background: message.startsWith("Şifre sıfırlama") ? "rgba(95,184,122,.12)" : "rgba(197,69,59,.14)", border: `1px solid ${message.startsWith("Şifre sıfırlama") ? "rgba(95,184,122,.35)" : "rgba(197,69,59,.4)"}` }, children: message }),
+      /* @__PURE__ */ jsx("button", { type: "submit", disabled: busy, style: { width: "100%", border: 0, borderRadius: 10, padding: "12px 14px", marginTop: 18, background: busy ? "#3d6f59" : "#00693E", color: "#fff", fontWeight: 700, cursor: busy ? "wait" : "pointer", fontSize: 14 }, children: busy ? "Lütfen bekleyin…" : isRegister ? "HESAP OLUŞTUR" : "GİRİŞ YAP" }),
+      !isRegister && /* @__PURE__ */ jsx("button", { type: "button", onClick: resetPassword, disabled: busy, style: { width: "100%", border: 0, background: "transparent", color: "#F2A93B", padding: "11px 8px 3px", cursor: "pointer", fontSize: 12 }, children: "Şifremi unuttum" })
+    ] }),
+    /* @__PURE__ */ jsxs("div", { style: { borderTop: "1px solid #343639", marginTop: 18, paddingTop: 17, textAlign: "center", color: "#A9ACA8", fontSize: 12 }, children: [
+      isRegister ? "Zaten hesabınız var mı? " : "Henüz hesabınız yok mu? ",
+      /* @__PURE__ */ jsx("button", { type: "button", onClick: () => { setMode(isRegister ? "login" : "register"); setMessage(""); }, style: { border: 0, background: "transparent", color: "#F2A93B", fontWeight: 700, padding: 0, cursor: "pointer" }, children: isRegister ? "Giriş yapın" : "Hesap oluşturun" })
+    ] }),
+    /* @__PURE__ */ jsx("p", { style: { color: "#6f7370", fontSize: 10, lineHeight: 1.45, margin: "18px 0 0", textAlign: "center" }, children: "İlk girişte bu tarayıcıdaki mevcut kayıt buluta aktarılır. Aynı hesapla diğer cihazlardan devam edebilirsiniz." })
+  ] }) });
+}
+
+function CloudAccountBadge({ user }) {
+  const [busy, setBusy] = useState(false);
+  return /* @__PURE__ */ jsxs("div", { style: { position: "fixed", right: 12, bottom: 12, zIndex: 9999, display: "flex", alignItems: "center", gap: 8, maxWidth: "calc(100vw - 24px)", borderRadius: 10, padding: "7px 9px", background: "rgba(20,21,22,.94)", border: "1px solid #3a3b3e", boxShadow: "0 8px 24px rgba(0,0,0,.35)", color: "#A9ACA8", fontFamily: "Arial, sans-serif", fontSize: 10 }, children: [
+    /* @__PURE__ */ jsx("span", { style: { width: 7, height: 7, borderRadius: "50%", background: "#5fb87a", flex: "0 0 auto" } }),
+    /* @__PURE__ */ jsx("span", { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: user.email || "Bulut hesabı" }),
+    /* @__PURE__ */ jsx("button", { disabled: busy, onClick: async () => { setBusy(true); try { await clearLocalGameCache(); await signOut(firebaseAuth); } finally { setBusy(false); } }, style: { border: "1px solid #55585c", borderRadius: 7, background: "#26282B", color: "#EFEDE4", padding: "4px 7px", cursor: busy ? "wait" : "pointer", fontSize: 10, whiteSpace: "nowrap" }, children: busy ? "…" : "Çıkış" })
+  ] });
+}
+
+function FirebaseAuthGate() {
+  const [ready, setReady] = useState(false);
+  const [user, setUser] = useState(null);
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(firebaseAuth, (nextUser) => {
+      currentCloudUser = nextUser || null;
+      setUser(nextUser || null);
+      setReady(true);
+    });
+    return unsubscribe;
+  }, []);
+  if (!ready) {
+    return /* @__PURE__ */ jsx("div", { style: { minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#141516", color: "#A9ACA8", fontFamily: "Arial, sans-serif" }, children: "BULUT HESABI KONTROL EDİLİYOR…" });
+  }
+  if (!user) return /* @__PURE__ */ jsx(FirebaseAuthScreen, {});
+  return /* @__PURE__ */ jsxs(Fragment, { children: [
+    /* @__PURE__ */ jsx(OtogarSim, {}),
+    /* @__PURE__ */ jsx(CloudAccountBadge, { user })
+  ] });
+}
+
 
 createRoot(document.getElementById("root")).render(
-  ReactDefault.createElement(OtogarSim)
+  ReactDefault.createElement(FirebaseAuthGate)
 );
 </script>
 </body>
