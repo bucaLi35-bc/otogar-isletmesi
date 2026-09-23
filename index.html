@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-<title>Otogar İşletmesi</title>
+<title>Otogar İşletmesi — BUILD-STAB-01</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script type="importmap">
 {
@@ -19,9 +19,11 @@
 <style>
   html, body { margin: 0; padding: 0; background: #141516; }
   #root { min-height: 100vh; }
+  #build-tag { position: fixed; top: 4px; left: 4px; z-index: 999999; background: #ff00ff; color: #fff; font: bold 11px monospace; padding: 2px 6px; border-radius: 4px; pointer-events: none; }
 </style>
 </head>
 <body>
+<div id="build-tag">BUILD-STAB-01</div>
 <div id="root"></div>
 <script type="module">
 import ReactDefault from "react";
