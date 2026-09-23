@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-<title>Otogar İşletmesi — BUILD-STAB-04</title>
+<title>Otogar İşletmesi — BUILD-STAB-05</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script type="importmap">
 {
@@ -23,7 +23,7 @@
 </style>
 </head>
 <body>
-<div id="build-tag">BUILD-STAB-04</div>
+<div id="build-tag">BUILD-STAB-05</div>
 <div id="root"></div>
 <script type="module">
 import ReactDefault from "react";
@@ -8460,6 +8460,7 @@ function OtogarSimCore() {
     }
     const totalOccurrences = LINE_WINDOW_SIZE[repeatMode] || 1;
     const pairKey = `${busId}-${depAt}`;
+    const lockedVehiclePrestij = bus2 ? realVehiclePrestij(bus2.type, bus2.condition) : 80;
     const lockedCapacity = bus2 ? busSpec(bus2.type).capacity : null;
     const queue = [];
     for (let i = 1; i < totalOccurrences; i++) {
