@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-<title>Otogar İşletmesi — BUILD-STAB-03</title>
+<title>Otogar İşletmesi — BUILD-STAB-04</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script type="importmap">
 {
@@ -23,11 +23,18 @@
 </style>
 </head>
 <body>
-<div id="build-tag">BUILD-STAB-03</div>
+<div id="build-tag">BUILD-STAB-04</div>
 <div id="root"></div>
 <script type="module">
 import ReactDefault from "react";
 import { createRoot } from "react-dom/client";
+
+window.addEventListener("error", (e) => {
+  const box = document.createElement("div");
+  box.style.cssText = "position:fixed;top:24px;left:4px;right:4px;z-index:9999999;background:#c5453b;color:#fff;font:12px monospace;padding:10px;border-radius:6px;white-space:pre-wrap;";
+  box.textContent = "GLOBAL HATA: " + (e.error && e.error.message ? e.error.message : e.message);
+  document.body.appendChild(box);
+});
 
 import { Fragment, jsx, jsxs } from "react/jsx-runtime";
 import { useState, useRef, useMemo, useEffect, Component } from "react";
@@ -19989,64 +19996,69 @@ function AssignModal({ route, idleBuses: idleBusesRaw, allBuses, idleDrivers, id
           {
             onClick: () => {
               if (!canAssign) return;
-              const returnTripConfig = { enabled: createReturnTrip, hour: returnHour, minute: returnMinute, routeId: returnRouteId, skippedStops: returnSkippedStops, price: returnPrice, priceMatrix: returnPriceMatrix, seatPlan: returnSeatPlan };
-              const result = onAssign(busId, route.id, driverIds, price, direction, depAt, skippedStops, attendantIds, seatPlan, priceMatrix, catering, repeatMode, returnTripConfig, cateringCount);
-              if (!result || result.ok !== false) {
-                onClose();
-                return;
+              try {
+                const returnTripConfig = { enabled: createReturnTrip, hour: returnHour, minute: returnMinute, routeId: returnRouteId, skippedStops: returnSkippedStops, price: returnPrice, priceMatrix: returnPriceMatrix, seatPlan: returnSeatPlan };
+                const result = onAssign(busId, route.id, driverIds, price, direction, depAt, skippedStops, attendantIds, seatPlan, priceMatrix, catering, repeatMode, returnTripConfig, cateringCount);
+                if (!result || result.ok !== false) {
+                  onClose();
+                  return;
+                }
+                if (result.reason === "duplicate_slot") {
+                  setSlotConflictPrompt({
+                    conflictingBusId: result.conflictingBusId,
+                    busId,
+                    routeId: route.id,
+                    driverIds,
+                    price,
+                    direction,
+                    depAt,
+                    skippedStops,
+                    attendantIds,
+                    seatPlan,
+                    priceMatrix,
+                    catering,
+                    repeatMode,
+                    cateringCount,
+                    returnTripConfig,
+                    swapSlotRouteId: result.conflictRouteId,
+                    swapSlotDirection: result.conflictDirection,
+                    swapSlotDepAt: result.conflictDepAt
+                  });
+                  return;
+                }
+                if (result.reason === "own_queue_conflict") {
+                  setOwnQueueConflictPrompt({
+                    busId,
+                    routeId: route.id,
+                    driverIds,
+                    price,
+                    direction,
+                    depAt,
+                    skippedStops,
+                    attendantIds,
+                    seatPlan,
+                    priceMatrix,
+                    catering,
+                    repeatMode,
+                    cateringCount,
+                    returnTripConfig,
+                    ownConflictKeys: result.ownConflictKeys
+                  });
+                  return;
+                }
+                const reasonMap = {
+                  "leave": "\u015Eof\xF6r ya da kabin memuru izinli.",
+                  "rest": "\u015Eof\xF6r ya da kabin memuru dinlenme s\xFCresinde.",
+                  "wrong-city": "Ara\xE7 bu rotan\u0131n hi\xE7bir dura\u011F\u0131nda de\u011Fil.",
+                  "not-ready": "Ara\xE7 hen\xFCz \xF6nceki seferden haz\u0131r de\u011Fil.",
+                  "misplaced-driver": "Se\xE7ilen \u015Fof\xF6r bu rotan\u0131n hi\xE7bir dura\u011F\u0131nda de\u011Fil.",
+                  "misplaced-attendant": "Se\xE7ilen kabin memuru bu rotan\u0131n hi\xE7bir dura\u011F\u0131nda de\u011Fil."
+                };
+                setAssignFailReason(reasonMap[result.reason] || result.reason || "Bilinmeyen bir sebepten sefer olu\u015Fturulamad\u0131.");
+              } catch (e) {
+                console.error("[AssignModal] SEFER\u0130 KAYDET s\u0131ras\u0131nda beklenmedik hata:", e);
+                setAssignFailReason(`Beklenmedik teknik hata \u2014 ${e && e.message ? e.message : String(e)}`);
               }
-              if (result.reason === "duplicate_slot") {
-                setSlotConflictPrompt({
-                  conflictingBusId: result.conflictingBusId,
-                  busId,
-                  routeId: route.id,
-                  driverIds,
-                  price,
-                  direction,
-                  depAt,
-                  skippedStops,
-                  attendantIds,
-                  seatPlan,
-                  priceMatrix,
-                  catering,
-                  repeatMode,
-                  cateringCount,
-                  returnTripConfig,
-                  swapSlotRouteId: result.conflictRouteId,
-                  swapSlotDirection: result.conflictDirection,
-                  swapSlotDepAt: result.conflictDepAt
-                });
-                return;
-              }
-              if (result.reason === "own_queue_conflict") {
-                setOwnQueueConflictPrompt({
-                  busId,
-                  routeId: route.id,
-                  driverIds,
-                  price,
-                  direction,
-                  depAt,
-                  skippedStops,
-                  attendantIds,
-                  seatPlan,
-                  priceMatrix,
-                  catering,
-                  repeatMode,
-                  cateringCount,
-                  returnTripConfig,
-                  ownConflictKeys: result.ownConflictKeys
-                });
-                return;
-              }
-              const reasonMap = {
-                "leave": "\u015Eof\xF6r ya da kabin memuru izinli.",
-                "rest": "\u015Eof\xF6r ya da kabin memuru dinlenme s\xFCresinde.",
-                "wrong-city": "Ara\xE7 bu rotan\u0131n hi\xE7bir dura\u011F\u0131nda de\u011Fil.",
-                "not-ready": "Ara\xE7 hen\xFCz \xF6nceki seferden haz\u0131r de\u011Fil.",
-                "misplaced-driver": "Se\xE7ilen \u015Fof\xF6r bu rotan\u0131n hi\xE7bir dura\u011F\u0131nda de\u011Fil.",
-                "misplaced-attendant": "Se\xE7ilen kabin memuru bu rotan\u0131n hi\xE7bir dura\u011F\u0131nda de\u011Fil."
-              };
-              setAssignFailReason(reasonMap[result.reason] || result.reason || "Bilinmeyen bir sebepten sefer olu\u015Fturulamad\u0131.");
             },
             disabled: !canAssign,
             className: "disp text-xs px-4 py-2.5 rounded flex items-center gap-1.5 ml-auto disabled:opacity-40",
