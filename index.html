@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-<title>Otogar İşletmesi — BUILD-STAB-02</title>
+<title>Otogar İşletmesi — BUILD-STAB-03</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script type="importmap">
 {
@@ -23,7 +23,7 @@
 </style>
 </head>
 <body>
-<div id="build-tag">BUILD-STAB-02</div>
+<div id="build-tag">BUILD-STAB-03</div>
 <div id="root"></div>
 <script type="module">
 import ReactDefault from "react";
@@ -19031,6 +19031,12 @@ function AssignModal({ route, idleBuses: idleBusesRaw, allBuses, idleDrivers, id
   const [assignFailReason, setAssignFailReason] = useState(null);
   const [slotConflictPrompt, setSlotConflictPrompt] = useState(null);
   const [ownQueueConflictPrompt, setOwnQueueConflictPrompt] = useState(null);
+  const modalScrollRef = useRef(null);
+  useEffect(() => {
+    if ((assignFailReason || slotConflictPrompt || ownQueueConflictPrompt) && modalScrollRef.current) {
+      modalScrollRef.current.scrollTo({ top: modalScrollRef.current.scrollHeight, behavior: "smooth" });
+    }
+  }, [assignFailReason, slotConflictPrompt, ownQueueConflictPrompt]);
   const [showAvailableOnly, setShowAvailableOnly] = useState(true);
   const idleBuses = forcedBusId ? (allBuses || idleBusesRaw).filter((b) => b.id === forcedBusId) : idleBusesRaw;
   const [busId, setBusId] = useState(forcedBusId || idleBuses[0]?.id || "");
@@ -19231,7 +19237,7 @@ function AssignModal({ route, idleBuses: idleBusesRaw, allBuses, idleDrivers, id
     // yükseklik hesabına hiç bağlı değil, "ekranın en altı" diyor, hepsi bu. Kaydırılan
     // içeriğe aşağıda paddingBottom eklendi ki son satırlar bu sabit çubuğun ARKASINDA
     // kalmasın.
-    /* @__PURE__ */ jsxs("div", { className: "fixed inset-0 z-[1100] overflow-y-auto", style: { background: C.asphalt, WebkitOverflowScrolling: "touch", paddingBottom: 84 }, onClick: (e) => e.stopPropagation(), children: [
+    /* @__PURE__ */ jsxs("div", { ref: modalScrollRef, className: "fixed inset-0 z-[1100] overflow-y-auto", style: { background: C.asphalt, WebkitOverflowScrolling: "touch", paddingBottom: 84 }, onClick: (e) => e.stopPropagation(), children: [
       /* @__PURE__ */ jsx("style", { children: `.disp { font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: 0.03em; } .mono { font-family: 'IBM Plex Mono', monospace; }` }),
       /* @__PURE__ */ jsxs("div", { className: "sticky top-0 z-10", style: { background: C.asphalt }, children: [
         /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-3 px-4 py-3", style: { borderBottom: `1px solid ${C.line}` }, children: [
